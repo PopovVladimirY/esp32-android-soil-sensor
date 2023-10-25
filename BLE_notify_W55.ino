@@ -32,6 +32,13 @@
 #define MMIN (MIN_MOISTURE)// + 4*180)
 #define MMAX (MAX_MOISTURE)// - 4*440)
 
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  25        /* Time ESP32 will go to sleep (in seconds) */
+
+#define MAX_CONNECT_WAIT  3
+
+RTC_DATA_ATTR int bootCount = 0;
+
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristicT = NULL;
 BLECharacteristic* pCharacteristicP = NULL;
@@ -40,6 +47,8 @@ BLECharacteristic* pCharacteristicB = NULL;
 BLECharacteristic* pCharacteristicM = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
+
+int32_t loopCnt = 0;
 
 Adafruit_BME280 bme; // I2C
 
@@ -66,6 +75,8 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 void setup() {
   Serial.begin(9600);
+
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
   int status = bme.begin(BME280_ADDRESS_ALTERNATE);
   if (!status) {
@@ -192,12 +203,27 @@ void loop() {
         pCharacteristicM->setValue((uint8_t*)&fM, sizeof(fM));
         pCharacteristicM->notify();
 
-        delay(1000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
-        
-        deviceConnected = false;
 
-        pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
+        delay(2000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+        
+        esp_deep_sleep_start();
+//        deviceConnected = false;
+
+//        pServer->startAdvertising(); // restart advertising
+//        Serial.println("start advertising");
+    }
+    else
+    {
+        // waiting for connection but not for too long
+        delay(2000); 
+        if (loopCnt > MAX_CONNECT_WAIT)
+        {
+          esp_deep_sleep_start();
+        }
+        else
+        {
+          loopCnt++;
+        }
     }
 /*    
     // disconnecting
