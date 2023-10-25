@@ -160,21 +160,24 @@ void setup() {
 void loop() {
     // notify changed value
     if (deviceConnected) {
+        delay(10000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
 
         float fT = bme.readTemperature();
         float fPa = bme.readPressure() / 100;
         float fHu = bme.readHumidity();
 
-        Serial.print("T = ");
-        Serial.println(fT);
-        Serial.print("P = ");
-        Serial.println(fPa);
-        Serial.print("H = ");
-        Serial.println(fHu);
+        //Serial.print("T = ");
+        //Serial.println(fT);
+        //Serial.print("P = ");
+        //Serial.println(fPa);
+        //Serial.print("H = ");
+        //Serial.println(fHu);
 
+        delay(100); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
         float fV = 2.0 * 3.67 * analogRead(34) / 4095;
-        Serial.println(fV);
+        //Serial.println(fV);
 
+        delay(100); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
         int msensor = analogRead(35);  // Read the analog value from sensor
         float fM = map(msensor, MMIN, MMAX, 100, 0); // map the 14-bit data to 8-bit data
 
@@ -189,11 +192,17 @@ void loop() {
         pCharacteristicM->setValue((uint8_t*)&fM, sizeof(fM));
         pCharacteristicM->notify();
 
-        delay(10000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+        delay(1000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+        
+        deviceConnected = false;
+
+        pServer->startAdvertising(); // restart advertising
+        Serial.println("start advertising");
     }
+/*    
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
-        delay(500); // give the bluetooth stack the chance to get things ready
+        delay(2000); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
         Serial.println("start advertising");
         oldDeviceConnected = deviceConnected;
@@ -203,4 +212,5 @@ void loop() {
         // do stuff here on connecting
         oldDeviceConnected = deviceConnected;
     }
+*/    
 }
