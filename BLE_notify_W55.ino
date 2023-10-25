@@ -35,7 +35,7 @@
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  25        /* Time ESP32 will go to sleep (in seconds) */
 
-#define MAX_CONNECT_WAIT  3
+#define MAX_CONNECT_WAIT  10
 
 RTC_DATA_ATTR int bootCount = 0;
 
@@ -171,7 +171,7 @@ void setup() {
 void loop() {
     // notify changed value
     if (deviceConnected) {
-        delay(10000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+        delay(5000); 
 
         float fT = bme.readTemperature();
         float fPa = bme.readPressure() / 100;
@@ -215,7 +215,7 @@ void loop() {
     else
     {
         // waiting for connection but not for too long
-        delay(2000); 
+        delay(500); 
         if (loopCnt > MAX_CONNECT_WAIT)
         {
           esp_deep_sleep_start();
