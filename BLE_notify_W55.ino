@@ -122,6 +122,7 @@ void setup() {
   // Create a BLE Characteristic
   pCharacteristicT = pService->createCharacteristic(
                       CHARACTERISTIC_T_UUID,
+                      BLECharacteristic::PROPERTY_READ |
                       BLECharacteristic::PROPERTY_NOTIFY
                     );
 
