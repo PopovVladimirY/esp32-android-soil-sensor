@@ -19,10 +19,12 @@
 #define uS_TO_S_FACTOR 1000000  // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  (60*10)  // Time ESP32 will sleep (in seconds)
 
-RTC_DATA_ATTR int32_t bootCount = 0;
+RTC_DATA_ATTR int32_t nBootCount = 0;
+RTC_DATA_ATTR int32_t nSleepInterval = TIME_TO_SLEEP;
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristicT = NULL;
+BLECharacteristic* pCharacteristicSleep = NULL;
 
 Adafruit_BME280 bme; // I2C
 int32_t bBmePresent = 0;
@@ -32,6 +34,7 @@ int32_t bBmePresent = 0;
 
 #define SERVICE_UUID        "2acd1159-5703-4b2d-95be-ac963748c40c"
 #define CHARACTERISTIC_T_UUID "9b5099ae-10f0-4a78-a8b7-eb086e3cb69b"
+#define CHARACTERISTIC_SLEEP_UUID "54021135-c289-4e63-af8e-653f32e7851a"
 
 typedef struct {
   int32_t nBootCnt;
@@ -44,21 +47,37 @@ typedef struct {
 
 //
 class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
+    void onConnect(BLEServer* pServer) 
+    {
     };
 
-    void onDisconnect(BLEServer* pServer) {
-    }
+    void onDisconnect(BLEServer* pServer) 
+    {
+    };
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) 
+    {
+      size_t len = pCharacteristic->getLength();
+      if (len == sizeof(int32_t))
+      {
+        int32_t rxValue = *(int32_t*)pCharacteristic->getData();
+        Serial.print("Received: ");
+        Serial.println(rxValue);
+        nSleepInterval = rxValue;
+      }
+    };
 };
 
 //
 void setup() 
 {
-  bootCount++;
+  nBootCount++;
 
   Serial.begin(9600);
 
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
 
   int status = bme.begin(BME280_ADDRESS_ALTERNATE);
   if (!status) {
@@ -100,12 +119,20 @@ void setup()
                       BLECharacteristic::PROPERTY_READ
                     );
 
+  // Create a BLE Characteristic
+  pCharacteristicSleep = pService->createCharacteristic(
+                      CHARACTERISTIC_SLEEP_UUID,
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_WRITE
+                    );
+
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
   pCharacteristicT->addDescriptor(new BLE2902());
 
   // Create a BLE Descriptor
-  pCharacteristicT->addDescriptor(new BLE2902());
+  pCharacteristicSleep->addDescriptor(new BLE2902());
+  pCharacteristicSleep->setCallbacks(new MyCallbacks());
 
   // Start the service
   pService->start();
@@ -116,7 +143,7 @@ void setup()
   pAdvertising->setScanResponse(false);
   pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
 
-  M_DATA data = {bootCount, 0, 0, 0, 0, 0};
+  M_DATA data = {nBootCount, 0, 0, 0, 0, 0};
 
   if (bBmePresent) 
   {
@@ -136,11 +163,12 @@ void setup()
   data.fSoilMoisture = map(msensor/MSENSOR_N, MMIN, MMAX, 100, 0); // map the 14-bit data to 8-bit data
 
   pCharacteristicT->setValue((uint8_t*)&data, sizeof(data));
+  pCharacteristicSleep->setValue((uint8_t*)&nSleepInterval, sizeof(nSleepInterval));
 
   pServer->startAdvertising(); // start advertising
 
   // wait a bit for client to read the data
-  delay(3000);
+  delay(5000);
   // power off
   esp_deep_sleep_start();
 }
