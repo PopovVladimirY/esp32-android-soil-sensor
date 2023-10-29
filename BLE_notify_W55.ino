@@ -29,7 +29,7 @@
 
 #define BATTERY_IO  34
 
-#define MSENSOR_N 10
+#define MSENSOR_N 5
 #define MSENSOR_IO 35
 
 #define MIN_MOISTURE 0 // 14-bit ADC range
@@ -38,48 +38,49 @@
 #define MMAX (MAX_MOISTURE)// - 4*440)
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  20 //(60*10)        /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  (60*10)        /* Time ESP32 will go to sleep (in seconds) */
 
-#define MAX_CONNECT_WAIT  100 // in 100ms intervals
-
-RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR int32_t bootCount = 0;
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristicT = NULL;
-//BLECharacteristic* pCharacteristicP = NULL;
-//BLECharacteristic* pCharacteristicH = NULL;
-//BLECharacteristic* pCharacteristicB = NULL;
-//BLECharacteristic* pCharacteristicM = NULL;
-bool deviceConnected = false;
-bool oldDeviceConnected = false;
+//bool deviceConnected = false;
+//bool oldDeviceConnected = false;
 
-int32_t loopCnt = 0;
+//int32_t loopCnt = 0;
 
 Adafruit_BME280 bme; // I2C
-int bBmePresent = 0;
+int32_t bBmePresent = 0;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
 #define SERVICE_UUID        "2acd1159-5703-4b2d-95be-ac963748c40c"
 #define CHARACTERISTIC_T_UUID "9b5099ae-10f0-4a78-a8b7-eb086e3cb69b"
-//#define CHARACTERISTIC_P_UUID "d2bc7047-ef44-4c5f-9913-3ee6a174e44a"
-//#define CHARACTERISTIC_H_UUID "1c383a81-5387-41bc-b55f-3ff410da6f7e"
-//#define CHARACTERISTIC_B_UUID "2af553d1-3f9f-4b19-ac6c-82ced3255cd0"
-//#define CHARACTERISTIC_M_UUID "ea936dd5-eafa-4f70-9b7a-6a794a4de3a9"
 
+typedef struct {
+  int32_t nBootCnt;
+  float fTemperature;
+  float fPressure;
+  float fHumidity;
+  float fBattery;
+  float fSoilMoisture;
+} M_DATA;
 
+//
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
     };
 
     void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
     }
 };
 
-void setup() {
+//
+void setup() 
+{
+  bootCount++;
+
   Serial.begin(9600);
 
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -108,7 +109,6 @@ void setup() {
                   Adafruit_BME280::STANDBY_MS_500); // Standby time. 
   }
 
-
   // Create the BLE Device
   BLEDevice::init("W55");
 
@@ -122,47 +122,15 @@ void setup() {
   // Create a BLE Characteristic
   pCharacteristicT = pService->createCharacteristic(
                       CHARACTERISTIC_T_UUID,
-                      BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_NOTIFY
+                      BLECharacteristic::PROPERTY_READ
                     );
 
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
   pCharacteristicT->addDescriptor(new BLE2902());
-/*
-  // Create a BLE Characteristic
-  pCharacteristicP = pService->createCharacteristic(
-                      CHARACTERISTIC_P_UUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
 
-  // Create a BLE Descriptor
-  pCharacteristicP->addDescriptor(new BLE2902());
-
-  // Create a BLE Characteristic
-  pCharacteristicH = pService->createCharacteristic(
-                      CHARACTERISTIC_H_UUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-
-  // Create a BLE Characteristic
-  pCharacteristicB = pService->createCharacteristic(
-                      CHARACTERISTIC_B_UUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-
-  // Create a BLE Characteristic
-  pCharacteristicM = pService->createCharacteristic(
-                      CHARACTERISTIC_M_UUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-*/
   // Create a BLE Descriptor
   pCharacteristicT->addDescriptor(new BLE2902());
-//  pCharacteristicP->addDescriptor(new BLE2902());
-//  pCharacteristicH->addDescriptor(new BLE2902());
-//  pCharacteristicB->addDescriptor(new BLE2902());
-//  pCharacteristicM->addDescriptor(new BLE2902());
 
   // Start the service
   pService->start();
@@ -172,93 +140,37 @@ void setup() {
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(false);
   pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
-  BLEDevice::startAdvertising();
-  Serial.println("Waiting a client connection to notify...");
+
+  M_DATA data = {0, 0, 0, 0, 0, 0};
+
+  if (bBmePresent) 
+  {
+    data.fTemperature = bme.readTemperature();
+    data.fPressure = bme.readPressure() / 100;
+    data.fHumidity = bme.readHumidity();
+  }
+
+  data.fBattery = 2.0 * 3.67 * analogRead(BATTERY_IO) / 4095;
+
+  int msensor = 0;
+  for (int i = 0; i < MSENSOR_N; i++)
+  {
+    msensor += analogRead(MSENSOR_IO);  // Read the analog value from sensor
+    delay(100);
+  }
+  data.fSoilMoisture = map(msensor/MSENSOR_N, MMIN, MMAX, 100, 0); // map the 14-bit data to 8-bit data
+
+  pCharacteristicT->setValue((uint8_t*)&data, sizeof(data));
+
+  pServer->startAdvertising(); // start advertising
+
+  // wait a bit for client to read the data
+  delay(3000);
+  // power off
+  esp_deep_sleep_start();
 }
 
-void loop() {
-    // notify changed value
-    if (deviceConnected) {
-        float fT = 0;
-        float fPa = 0;
-        float fHu = 0;
-
-        if (bBmePresent) {
-          fT = bme.readTemperature();
-          fPa = bme.readPressure() / 100;
-          fHu = bme.readHumidity();
-        }
-        //Serial.print("T = ");
-        //Serial.println(fT);
-        //Serial.print("P = ");
-        //Serial.println(fPa);
-        //Serial.print("H = ");
-        //Serial.println(fHu);
-
-        float fV = 2.0 * 3.67 * analogRead(BATTERY_IO) / 4095;
-        //Serial.println(fV);
-
-        int msensor = 0;
-        for (int i = 0; i < MSENSOR_N; i++)
-        {
-          msensor += analogRead(MSENSOR_IO);  // Read the analog value from sensor
-          delay(100);
-        }
-        float fM = map(msensor/MSENSOR_N, MMIN, MMAX, 100, 0); // map the 14-bit data to 8-bit data
-
-        float fNotify[] = {fT, fPa, fHu, fV, fM}; 
-        pCharacteristicT->setValue((uint8_t*)&fNotify, sizeof(fNotify));
-
-        delay(3000); 
-
-        pCharacteristicT->notify();
-
-/*
-        pCharacteristicT->setValue((uint8_t*)&fT, sizeof(fT));
-        pCharacteristicT->notify();
-        pCharacteristicP->setValue((uint8_t*)&fPa, sizeof(fPa));
-        pCharacteristicP->notify();
-        pCharacteristicH->setValue((uint8_t*)&fHu, sizeof(fHu));
-        pCharacteristicH->notify();
-        pCharacteristicB->setValue((uint8_t*)&fV, sizeof(fV));
-        pCharacteristicB->notify();
-        pCharacteristicM->setValue((uint8_t*)&fM, sizeof(fM));
-        pCharacteristicM->notify();
-*/
-
-        delay(500);
-        
-        esp_deep_sleep_start();
-//        deviceConnected = false;
-
-//        pServer->startAdvertising(); // restart advertising
-//        Serial.println("start advertising");
-    }
-    else
-    {
-        // waiting for connection but not for too long
-        delay(100); 
-        if (loopCnt > MAX_CONNECT_WAIT)
-        {
-          esp_deep_sleep_start();
-        }
-        else
-        {
-          loopCnt++;
-        }
-    }
-/*    
-    // disconnecting
-    if (!deviceConnected && oldDeviceConnected) {
-        delay(2000); // give the bluetooth stack the chance to get things ready
-        pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
-        oldDeviceConnected = deviceConnected;
-    }
-    // connecting
-    if (deviceConnected && !oldDeviceConnected) {
-        // do stuff here on connecting
-        oldDeviceConnected = deviceConnected;
-    }
-*/    
+void loop() 
+{
+  // never gets here
 }
