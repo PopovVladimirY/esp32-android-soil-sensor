@@ -13,11 +13,11 @@
 
 #define MIN_MOISTURE 0 // 14-bit ADC range
 #define MAX_MOISTURE 4095 // 14-bit ADC range
-#define MMIN (MIN_MOISTURE)// + 4*180)
-#define MMAX (MAX_MOISTURE)// - 4*440)
+#define MMIN (MIN_MOISTURE) // + 4*180)
+#define MMAX (MAX_MOISTURE) // - 4*440)
 
 #define uS_TO_S_FACTOR 1000000  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  (60*10)  // Time ESP32 will go to sleep (in seconds)
+#define TIME_TO_SLEEP  (60*10)  // Time ESP32 will sleep (in seconds)
 
 RTC_DATA_ATTR int32_t bootCount = 0;
 
