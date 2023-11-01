@@ -75,9 +75,7 @@ void setup()
 {
   nBootCount++;
 
-  Serial.begin(9600);
-
-  esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
+  Serial.begin(115200);
 
   int status = bme.begin(BME280_ADDRESS_ALTERNATE);
   if (!status) {
@@ -116,22 +114,35 @@ void setup()
   // Create a BLE Characteristic
   pCharacteristicT = pService->createCharacteristic(
                       CHARACTERISTIC_T_UUID,
-                      BLECharacteristic::PROPERTY_READ
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_NOTIFY
                     );
 
   // Create a BLE Characteristic
   pCharacteristicSleep = pService->createCharacteristic(
                       CHARACTERISTIC_SLEEP_UUID,
                       BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_WRITE
+                      BLECharacteristic::PROPERTY_WRITE |
+                      BLECharacteristic::PROPERTY_NOTIFY
                     );
 
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
-  pCharacteristicT->addDescriptor(new BLE2902());
-
+  BLEDescriptor* pDescT = new BLEDescriptor((uint16_t)0x2901);
+  pDescT->setValue("M-Sensor Readings");
+  BLE2902* pBLE2902_T = new BLE2902();
+  pBLE2902_T->setNotifications(true);
+  pCharacteristicT->addDescriptor(pDescT);
+  pCharacteristicT->addDescriptor(pBLE2902_T);
+  
   // Create a BLE Descriptor
-  pCharacteristicSleep->addDescriptor(new BLE2902());
+  BLEDescriptor* pDescSleep = new BLEDescriptor((uint16_t)0x2901);
+  pDescSleep->setValue("Deep Sleep (seconds)");
+  BLE2902* pBLE2902_Sleep = new BLE2902();
+  pBLE2902_Sleep->setNotifications(true);
+  pCharacteristicT->addDescriptor(pDescSleep);
+  pCharacteristicSleep->addDescriptor(pBLE2902_Sleep);
+
   pCharacteristicSleep->setCallbacks(new MyCallbacks());
 
   // Start the service
@@ -165,11 +176,12 @@ void setup()
   pCharacteristicT->setValue((uint8_t*)&data, sizeof(data));
   pCharacteristicSleep->setValue((uint8_t*)&nSleepInterval, sizeof(nSleepInterval));
 
-  pServer->startAdvertising(); // start advertising
+  BLEDevice::startAdvertising(); // start advertising
 
   // wait a bit for client to read the data
-  delay(5000);
+  delay(8000);
   // power off
+  esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
   esp_deep_sleep_start();
 }
 
