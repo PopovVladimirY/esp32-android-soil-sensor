@@ -53,6 +53,8 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
     void onDisconnect(BLEServer* pServer) 
     {
+      esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
+      esp_deep_sleep_start();
     };
 };
 
@@ -67,6 +69,8 @@ class MyCallbacks: public BLECharacteristicCallbacks {
         Serial.println(rxValue);
         nSleepInterval = rxValue;
       }
+//      esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
+//      esp_deep_sleep_start();
     };
 };
 
@@ -179,7 +183,7 @@ void setup()
   BLEDevice::startAdvertising(); // start advertising
 
   // wait a bit for client to read the data
-  delay(8000);
+  delay(30000);
   // power off
   esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
   esp_deep_sleep_start();
