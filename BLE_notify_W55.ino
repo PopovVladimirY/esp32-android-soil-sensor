@@ -22,7 +22,7 @@
 #define MMAX (MAX_MOISTURE) // - 4*440)
 
 #define uS_TO_S_FACTOR 1000000  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  5 //(60*10)  // Time ESP32 will sleep (in seconds)
+#define TIME_TO_SLEEP  (30 * 60)  // Time ESP32 will sleep (in seconds)
 
 RTC_DATA_ATTR int32_t nBootCount = 0;
 RTC_DATA_ATTR int64_t nSleepInterval = TIME_TO_SLEEP;
@@ -89,9 +89,6 @@ class MyCallbacks: public BLECharacteristicCallbacks {
       Serial.println(rxValue);
       nSleepInterval = rxValue;
     }
-//      esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
-//      esp_deep_sleep_start();
-    deep_sleep();
   };
 };
 
@@ -196,7 +193,7 @@ void setup()
     data.fHumidity = bme.readHumidity();
   }
 
-  data.fBattery = 2.0 * 3.67 * analogRead(BATTERY_IO) / 4095;
+  data.fBattery = 2.0 * 3.7 * analogRead(BATTERY_IO) / 4095;
 
   int msensor = 0;
   for (int i = 0; i < MSENSOR_N; i++)
