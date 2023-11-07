@@ -2,6 +2,8 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include "esp_bt_main.h"
+#include "esp_wifi.h"
 
 #include <Wire.h>
 #include <Adafruit_BME280.h>
@@ -11,16 +13,19 @@
 #define MSENSOR_N 5
 #define MSENSOR_IO 35
 
+#define SOIL_POWER_PIN 17
+#define BME280_POWER_PIN 5
+
 #define MIN_MOISTURE 0 // 14-bit ADC range
 #define MAX_MOISTURE 4095 // 14-bit ADC range
 #define MMIN (MIN_MOISTURE) // + 4*180)
 #define MMAX (MAX_MOISTURE) // - 4*440)
 
 #define uS_TO_S_FACTOR 1000000  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  (60*10)  // Time ESP32 will sleep (in seconds)
+#define TIME_TO_SLEEP  5 //(60*10)  // Time ESP32 will sleep (in seconds)
 
 RTC_DATA_ATTR int32_t nBootCount = 0;
-RTC_DATA_ATTR int32_t nSleepInterval = TIME_TO_SLEEP;
+RTC_DATA_ATTR int64_t nSleepInterval = TIME_TO_SLEEP;
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristicT = NULL;
@@ -28,6 +33,7 @@ BLECharacteristic* pCharacteristicSleep = NULL;
 
 Adafruit_BME280 bme; // I2C
 int32_t bBmePresent = 0;
+bool bDeepSleep = 0;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
@@ -45,33 +51,48 @@ typedef struct {
   float fSoilMoisture;
 } M_DATA;
 
+void deep_sleep()
+{
+  Serial.println("Deep Sleep");
+
+//  esp_bluedroid_disable();
+//  esp_bt_controller_disable();
+//  esp_wifi_stop();
+//  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
+
+  Serial.println("Shall not be printed");
+
+}
+
 //
 class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) 
-    {
-    };
+  void onConnect(BLEServer* pServer) 
+  {
+  };
 
-    void onDisconnect(BLEServer* pServer) 
-    {
-      esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
-      esp_deep_sleep_start();
-    };
+  void onDisconnect(BLEServer* pServer) 
+  {
+    bDeepSleep = 1; //  deep_sleep();
+  };
 };
 
 class MyCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) 
+  void onWrite(BLECharacteristic *pCharacteristic) 
+  {
+    size_t len = pCharacteristic->getLength();
+    if (len == sizeof(int32_t))
     {
-      size_t len = pCharacteristic->getLength();
-      if (len == sizeof(int32_t))
-      {
-        int32_t rxValue = *(int32_t*)pCharacteristic->getData();
-        Serial.print("Received: ");
-        Serial.println(rxValue);
-        nSleepInterval = rxValue;
-      }
+      int32_t rxValue = *(int32_t*)pCharacteristic->getData();
+      Serial.print("Received: ");
+      Serial.println(rxValue);
+      nSleepInterval = rxValue;
+    }
 //      esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
 //      esp_deep_sleep_start();
-    };
+    deep_sleep();
+  };
 };
 
 //
@@ -81,9 +102,17 @@ void setup()
 
   Serial.begin(115200);
 
+  Serial.println("Booting..."); //, check wiring or "
+
+  pinMode(BME280_POWER_PIN, OUTPUT);
+  pinMode(SOIL_POWER_PIN, OUTPUT);
+
+  digitalWrite(BME280_POWER_PIN, HIGH);
+  digitalWrite(SOIL_POWER_PIN, HIGH);
+
   int status = bme.begin(BME280_ADDRESS_ALTERNATE);
   if (!status) {
-    Serial.println(F("No valid BME280 sensor")); //, check wiring or "
+    Serial.println("No valid BME280 sensor"); //, check wiring or "
 //                      "try a different address!"));
                       
 //    Serial.print("SensorID was: 0x"); Serial.println(bme.sensorID(),16);
@@ -183,10 +212,14 @@ void setup()
   BLEDevice::startAdvertising(); // start advertising
 
   // wait a bit for client to read the data
-  delay(30000);
+  int32_t nCnt = 1000;
+  while (!bDeepSleep && nCnt > 0)
+  {
+    delay(30);
+    nCnt--;
+  }
   // power off
-  esp_sleep_enable_timer_wakeup(nSleepInterval* uS_TO_S_FACTOR);
-  esp_deep_sleep_start();
+  deep_sleep();
 }
 
 void loop() 
